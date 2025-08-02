@@ -136,4 +136,19 @@ temp/
 *.mov
 *.mkv
 config.json
-temp-audio.m4a 
+temp-audio.m4a
+
+# Visual Studio
+.vs/
+*.pyproj.user
+*.pyproj.user.*
+*.sln.docstates
+*.user
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/extensions.json 

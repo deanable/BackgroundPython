@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>main.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <InterpreterId>MSBuild|Python|3.9</InterpreterId>
+    <InterpreterVersion>3.9</InterpreterVersion>
+    <InterpreterArchitecture>X64</InterpreterArchitecture>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Interpreter Include="MSBuild|Python|3.9">
+      <Id>MSBuild|Python|3.9</Id>
+      <Version>3.9</Version>
+      <Description>Python 3.9 (64-bit)</Description>
+      <InterpreterPath>python.exe</InterpreterPath>
+      <WindowsInterpreterPath>pythonw.exe</WindowsInterpreterPath>
+      <LibraryPath>$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\src</LibraryPath>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+      <Architecture>X64</Architecture>
+    </Interpreter>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="main.py" />
+    <Compile Include="install.py" />
+    <Compile Include="test_installation.py" />
+    <Compile Include="src\__init__.py" />
+    <Compile Include="src\config.py" />
+    <Compile Include="src\logger.py" />
+    <Compile Include="src\pexels_api.py" />
+    <Compile Include="src\video_processor.py" />
+    <Compile Include="src\gui.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="README.md" />
+    <Content Include="requirements.txt" />
+    <Content Include="run.bat" />
+    <Content Include="run.sh" />
+    <Content Include=".gitignore" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="logs\" />
+    <Folder Include="temp\" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="requests" Version="2.31.0" />
+    <PackageReference Include="opencv-python" Version="4.8.1.78" />
+    <PackageReference Include="moviepy" Version="1.0.3" />
+    <PackageReference Include="Pillow" Version="10.0.1" />
+    <PackageReference Include="python-dotenv" Version="1.0.0" />
+    <PackageReference Include="tqdm" Version="4.66.1" />
+    <PackageReference Include="loguru" Version="0.7.2" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets')" />
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets')" />
+</Project> 
