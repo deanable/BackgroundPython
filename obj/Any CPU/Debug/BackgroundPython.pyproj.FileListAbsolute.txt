@@ -1,0 +1,3 @@
+C:\Users\Dean Kruger\source\repos\deanable\BackgroundPython\obj\Any CPU\Debug\BackgroundPython.pyproj.CoreCompileInputs.cache
+C:\Users\Dean Kruger\source\repos\deanable\BackgroundPython\bin\Microsoft.PythonTools.WebRole.dll
+C:\Users\Dean Kruger\source\repos\deanable\BackgroundPython\bin\wfastcgi.py
