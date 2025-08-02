@@ -11,7 +11,7 @@
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <InterpreterId>MSBuild|Python|3.13</InterpreterId>
+    <InterpreterId>MSBuild|venv|3.13</InterpreterId>
     <InterpreterVersion>3.13</InterpreterVersion>
     <InterpreterArchitecture>X64</InterpreterArchitecture>
   </PropertyGroup>
@@ -24,12 +24,12 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Interpreter Include="MSBuild|Python|3.13">
-      <Id>MSBuild|Python|3.13</Id>
+    <Interpreter Include="MSBuild|venv|3.13">
+      <Id>MSBuild|venv|3.13</Id>
       <Version>3.13</Version>
-      <Description>Python 3.13 (64-bit)</Description>
-      <InterpreterPath>python.exe</InterpreterPath>
-      <WindowsInterpreterPath>pythonw.exe</WindowsInterpreterPath>
+      <Description>Python 3.13 Virtual Environment</Description>
+      <InterpreterPath>venv\Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>venv\Scripts\pythonw.exe</WindowsInterpreterPath>
       <LibraryPath>$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\src</LibraryPath>
       <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
       <Architecture>X64</Architecture>
@@ -59,13 +59,13 @@
     <Folder Include="temp\" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="requests" Version="2.31.0" />
-    <PackageReference Include="opencv-python" Version="4.8.1.78" />
-    <PackageReference Include="moviepy" Version="1.0.3" />
-    <PackageReference Include="Pillow" Version="10.0.1" />
-    <PackageReference Include="python-dotenv" Version="1.0.0" />
-    <PackageReference Include="tqdm" Version="4.66.1" />
-    <PackageReference Include="loguru" Version="0.7.2" />
+    <PackageReference Include="requests" Version="2.32.4" />
+    <PackageReference Include="opencv-python" Version="4.12.0.88" />
+    <PackageReference Include="moviepy" Version="2.2.1" />
+    <PackageReference Include="Pillow" Version="11.3.0" />
+    <PackageReference Include="python-dotenv" Version="1.1.1" />
+    <PackageReference Include="tqdm" Version="4.67.1" />
+    <PackageReference Include="loguru" Version="0.7.3" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets')" />
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets')" />
