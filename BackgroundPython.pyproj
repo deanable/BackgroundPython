@@ -11,8 +11,8 @@
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <InterpreterId>MSBuild|Python|3.9</InterpreterId>
-    <InterpreterVersion>3.9</InterpreterVersion>
+    <InterpreterId>MSBuild|Python|3.13</InterpreterId>
+    <InterpreterVersion>3.13</InterpreterVersion>
     <InterpreterArchitecture>X64</InterpreterArchitecture>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -24,10 +24,10 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Interpreter Include="MSBuild|Python|3.9">
-      <Id>MSBuild|Python|3.9</Id>
-      <Version>3.9</Version>
-      <Description>Python 3.9 (64-bit)</Description>
+    <Interpreter Include="MSBuild|Python|3.13">
+      <Id>MSBuild|Python|3.13</Id>
+      <Version>3.13</Version>
+      <Description>Python 3.13 (64-bit)</Description>
       <InterpreterPath>python.exe</InterpreterPath>
       <WindowsInterpreterPath>pythonw.exe</WindowsInterpreterPath>
       <LibraryPath>$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\src</LibraryPath>
