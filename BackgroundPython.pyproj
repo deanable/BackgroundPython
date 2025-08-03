@@ -64,6 +64,11 @@
     <Content Include=".gitignore" />
     <Content Include="bin\wfastcgi.py" />
     <Content Include="bin\Microsoft.PythonTools.WebRole.dll" />
+    <Content Include="py2exe\setup.py" />
+    <Content Include="py2exe\build.bat" />
+    <Content Include="py2exe\build.ps1" />
+    <Content Include="py2exe\requirements-build.txt" />
+    <Content Include="py2exe\README.md" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="logs\" />
@@ -72,6 +77,7 @@
     <Folder Include="obj\" />
     <Folder Include="env\" />
     <Folder Include="venv\" />
+    <Folder Include="py2exe\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets')" />
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets')" />
