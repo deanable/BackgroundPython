@@ -119,9 +119,9 @@ class BackgroundVideoGUI:
         max_clips_spinbox.grid(row=0, column=1, sticky=tk.W, padx=(0, 10))
         
         # Min clip duration
-        ttk.Label(advanced_frame, text="Min Clip Duration (s):").grid(row=1, column=0, sticky=tk.W, padx=(0, 10))
+        ttk.Label(advanced_frame, text="Min Clip Duration (min):").grid(row=1, column=0, sticky=tk.W, padx=(0, 10))
         self.min_clip_duration_var = tk.IntVar()
-        min_duration_slider = ttk.Scale(advanced_frame, from_=1, to=60, variable=self.min_clip_duration_var,
+        min_duration_slider = ttk.Scale(advanced_frame, from_=1, to=10, variable=self.min_clip_duration_var,
                                         orient='horizontal', length=200)
         min_duration_slider.grid(row=1, column=1, columnspan=2, sticky='ew')
         self.min_duration_label = ttk.Label(advanced_frame, text="1")
@@ -133,12 +133,12 @@ class BackgroundVideoGUI:
         self.min_clip_duration_var.trace('w', update_min_duration_label)
         
         # Max clip duration
-        ttk.Label(advanced_frame, text="Max Clip Duration (s):").grid(row=2, column=0, sticky=tk.W, padx=(0, 10))
+        ttk.Label(advanced_frame, text="Max Clip Duration (min):").grid(row=2, column=0, sticky=tk.W, padx=(0, 10))
         self.max_clip_duration_var = tk.IntVar()
-        max_duration_slider = ttk.Scale(advanced_frame, from_=5, to=300, variable=self.max_clip_duration_var,
+        max_duration_slider = ttk.Scale(advanced_frame, from_=1, to=20, variable=self.max_clip_duration_var,
                                         orient='horizontal', length=200)
         max_duration_slider.grid(row=2, column=1, columnspan=2, sticky='ew')
-        self.max_duration_label = ttk.Label(advanced_frame, text="5")
+        self.max_duration_label = ttk.Label(advanced_frame, text="1")
         self.max_duration_label.grid(row=2, column=3, sticky=tk.W)
         
         # Update max duration label when slider changes
@@ -192,8 +192,11 @@ class BackgroundVideoGUI:
         self.resolution_var.set(self.config.get_resolution())
         self.aspect_ratio_var.set(self.config.get_aspect_ratio())
         self.max_clips_var.set(self.config.get_max_clips())
-        self.min_clip_duration_var.set(self.config.get_min_clip_duration())
-        self.max_clip_duration_var.set(self.config.get_max_clip_duration())
+        # Convert seconds to minutes for UI display, minimum 1 minute
+        min_duration_seconds = self.config.get_min_clip_duration()
+        max_duration_seconds = self.config.get_max_clip_duration()
+        self.min_clip_duration_var.set(max(1, min_duration_seconds // 60))
+        self.max_clip_duration_var.set(max(1, max_duration_seconds // 60))
         self.output_dir_var.set(self.config.get_output_dir())
         
         # Update labels to show integer values
@@ -213,8 +216,8 @@ class BackgroundVideoGUI:
         self.config.set_resolution(self.resolution_var.get())
         self.config.set_aspect_ratio(self.aspect_ratio_var.get())
         self.config.set_max_clips(self.max_clips_var.get())
-        self.config.set_min_clip_duration(self.min_clip_duration_var.get())
-        self.config.set_max_clip_duration(self.max_clip_duration_var.get())
+        self.config.set_min_clip_duration(self.min_clip_duration_var.get() * 60)
+        self.config.set_max_clip_duration(self.max_clip_duration_var.get() * 60)
         self.config.set_output_dir(self.output_dir_var.get())
     
     def browse_output_dir(self):
@@ -276,8 +279,8 @@ class BackgroundVideoGUI:
             target_resolution = self.resolution_var.get()
             aspect_ratio = self.aspect_ratio_var.get()
             max_clips = self.max_clips_var.get()
-            min_clip_duration = self.min_clip_duration_var.get()
-            max_clip_duration = self.max_clip_duration_var.get()
+            min_clip_duration = self.min_clip_duration_var.get() * 60
+            max_clip_duration = self.max_clip_duration_var.get() * 60
             output_dir = self.output_dir_var.get()
             
             # Create output filename
