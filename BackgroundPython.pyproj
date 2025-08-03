@@ -11,9 +11,10 @@
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <InterpreterId>MSBuild|venv|3.13</InterpreterId>
+    <InterpreterId>MSBuild|env1|$(MSBuildProjectFullPath)</InterpreterId>
     <InterpreterVersion>3.13</InterpreterVersion>
     <InterpreterArchitecture>X64</InterpreterArchitecture>
+    <SuppressConfigureTestFrameworkPrompt>true</SuppressConfigureTestFrameworkPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -24,6 +25,15 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Interpreter Include="env1\">
+      <Id>env1</Id>
+      <Version>3.13</Version>
+      <Description>env1 (Python 3.13)</Description>
+      <InterpreterPath>Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+      <Architecture>X64</Architecture>
+    </Interpreter>
     <Interpreter Include="MSBuild|venv|3.13">
       <Id>MSBuild|venv|3.13</Id>
       <Version>3.13</Version>
@@ -52,20 +62,16 @@
     <Content Include="run.bat" />
     <Content Include="run.sh" />
     <Content Include=".gitignore" />
+    <Content Include="bin\wfastcgi.py" />
+    <Content Include="bin\Microsoft.PythonTools.WebRole.dll" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="logs\" />
     <Folder Include="src\" />
-    <Folder Include="temp\" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="requests" Version="2.32.4" />
-    <PackageReference Include="opencv-python" Version="4.12.0.88" />
-    <PackageReference Include="moviepy" Version="2.2.1" />
-    <PackageReference Include="Pillow" Version="11.3.0" />
-    <PackageReference Include="python-dotenv" Version="1.1.1" />
-    <PackageReference Include="tqdm" Version="4.67.1" />
-    <PackageReference Include="loguru" Version="0.7.3" />
+    <Folder Include="bin\" />
+    <Folder Include="obj\" />
+    <Folder Include="env\" />
+    <Folder Include="venv\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.Web.targets')" />
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets')" />

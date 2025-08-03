@@ -77,11 +77,19 @@ class BackgroundVideoGUI:
         self.search_term_var = tk.StringVar()
         ttk.Entry(search_frame, textvariable=self.search_term_var, width=30).grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 10))
         
-        # Duration
+                # Duration
         ttk.Label(search_frame, text="Target Duration (seconds):").grid(row=1, column=0, sticky=tk.W, padx=(0, 10))
         self.duration_var = tk.IntVar()
-        duration_spinbox = ttk.Spinbox(search_frame, from_=30, to=3600, textvariable=self.duration_var, width=10)
-        duration_spinbox.grid(row=1, column=1, sticky=tk.W, padx=(0, 10))
+        target_duration_slider = ttk.Scale(search_frame, from_=30, to=3600, variable=self.duration_var, 
+                                            orient='horizontal', length=200)
+        target_duration_slider.grid(row=1, column=1, columnspan=2, sticky='ew')
+        self.duration_label = ttk.Label(search_frame, text="30")
+        self.duration_label.grid(row=1, column=3, sticky=tk.W)
+        
+        # Update duration label when slider changes
+        def update_duration_label(*args):
+            self.duration_label.config(text=str(int(self.duration_var.get())))
+        self.duration_var.trace('w', update_duration_label)
         
         # Resolution
         ttk.Label(search_frame, text="Resolution:").grid(row=2, column=0, sticky=tk.W, padx=(0, 10))
@@ -113,14 +121,30 @@ class BackgroundVideoGUI:
         # Min clip duration
         ttk.Label(advanced_frame, text="Min Clip Duration (s):").grid(row=1, column=0, sticky=tk.W, padx=(0, 10))
         self.min_clip_duration_var = tk.IntVar()
-        min_duration_spinbox = ttk.Spinbox(advanced_frame, from_=1, to=60, textvariable=self.min_clip_duration_var, width=10)
-        min_duration_spinbox.grid(row=1, column=1, sticky=tk.W, padx=(0, 10))
+        min_duration_slider = ttk.Scale(advanced_frame, from_=1, to=60, variable=self.min_clip_duration_var,
+                                        orient='horizontal', length=200)
+        min_duration_slider.grid(row=1, column=1, columnspan=2, sticky='ew')
+        self.min_duration_label = ttk.Label(advanced_frame, text="1")
+        self.min_duration_label.grid(row=1, column=3, sticky=tk.W)
+        
+        # Update min duration label when slider changes
+        def update_min_duration_label(*args):
+            self.min_duration_label.config(text=str(int(self.min_clip_duration_var.get())))
+        self.min_clip_duration_var.trace('w', update_min_duration_label)
         
         # Max clip duration
         ttk.Label(advanced_frame, text="Max Clip Duration (s):").grid(row=2, column=0, sticky=tk.W, padx=(0, 10))
         self.max_clip_duration_var = tk.IntVar()
-        max_duration_spinbox = ttk.Spinbox(advanced_frame, from_=5, to=300, textvariable=self.max_clip_duration_var, width=10)
-        max_duration_spinbox.grid(row=2, column=1, sticky=tk.W, padx=(0, 10))
+        max_duration_slider = ttk.Scale(advanced_frame, from_=5, to=300, variable=self.max_clip_duration_var,
+                                        orient='horizontal', length=200)
+        max_duration_slider.grid(row=2, column=1, columnspan=2, sticky='ew')
+        self.max_duration_label = ttk.Label(advanced_frame, text="5")
+        self.max_duration_label.grid(row=2, column=3, sticky=tk.W)
+        
+        # Update max duration label when slider changes
+        def update_max_duration_label(*args):
+            self.max_duration_label.config(text=str(int(self.max_clip_duration_var.get())))
+        self.max_clip_duration_var.trace('w', update_max_duration_label)
         
         # Output Section
         output_frame = ttk.LabelFrame(main_frame, text="Output Configuration", padding="10")
@@ -171,6 +195,15 @@ class BackgroundVideoGUI:
         self.min_clip_duration_var.set(self.config.get_min_clip_duration())
         self.max_clip_duration_var.set(self.config.get_max_clip_duration())
         self.output_dir_var.set(self.config.get_output_dir())
+        
+        # Update labels to show integer values
+        self.root.after(100, self.update_slider_labels)
+    
+    def update_slider_labels(self):
+        """Update slider labels to show integer values."""
+        self.duration_label.config(text=str(int(self.duration_var.get())))
+        self.min_duration_label.config(text=str(int(self.min_clip_duration_var.get())))
+        self.max_duration_label.config(text=str(int(self.max_clip_duration_var.get())))
     
     def save_config(self):
         """Save GUI values to configuration."""
@@ -252,9 +285,9 @@ class BackgroundVideoGUI:
             output_filename = f"background_video_{search_term.replace(' ', '_')}_{timestamp}.mp4"
             output_path = os.path.join(output_dir, output_filename)
             
-            # Update status
-            self.root.after(0, lambda: self.status_var.set("Searching for videos..."))
-            self.root.after(0, lambda: self.progress_var.set(10))
+            # Update status for downloading phase (0-50%)
+            self.root.after(0, lambda: self.status_var.set("Searching and downloading videos..."))
+            self.root.after(0, lambda: self.progress_var.set(0))
             
             # Search and download videos
             downloaded_files = self.pexels_api.search_and_download_videos(
@@ -266,13 +299,32 @@ class BackgroundVideoGUI:
                 self.root.after(0, lambda: messagebox.showerror("Error", "No videos were downloaded"))
                 return
             
-            # Update status
-            self.root.after(0, lambda: self.status_var.set("Processing videos..."))
+            # Update status for processing phase (50-100%)
+            self.root.after(0, lambda: self.status_var.set("Processing and concatenating videos..."))
             self.root.after(0, lambda: self.progress_var.set(50))
             
-            # Process videos
-            success = self.video_processor.process_videos(
-                downloaded_files, target_duration, target_resolution, output_path
+            # Process videos with progress callback
+            def progress_callback(current_file, total_files, current_step):
+                """Callback to update progress during video processing."""
+                if total_files > 0:
+                    # Calculate progress from 50% to 100%
+                    file_progress = (current_file / total_files) * 0.5  # 0.5 = 50% of remaining progress
+                    total_progress = 50 + file_progress  # Start from 50%
+                    self.root.after(0, lambda: self.progress_var.set(total_progress))
+                    
+                    # Update status with current file being processed
+                    if current_step == "normalizing":
+                        status_text = f"Normalizing video {current_file}/{total_files}..."
+                    elif current_step == "concatenating":
+                        status_text = f"Concatenating videos ({current_file}/{total_files})..."
+                    else:
+                        status_text = f"Processing video {current_file}/{total_files}..."
+                    
+                    self.root.after(0, lambda: self.status_var.set(status_text))
+            
+            # Process videos with progress callback
+            success = self.video_processor.process_videos_with_progress(
+                downloaded_files, target_duration, target_resolution, output_path, progress_callback
             )
             
             if success:
