@@ -309,19 +309,23 @@ class BackgroundVideoGUI:
             def progress_callback(current_file, total_files, current_step):
                 """Callback to update progress during video processing."""
                 if total_files > 0:
-                    # Calculate progress from 50% to 100%
-                    file_progress = (current_file / total_files) * 0.5  # 0.5 = 50% of remaining progress
-                    total_progress = 50 + file_progress  # Start from 50%
-                    self.root.after(0, lambda: self.progress_var.set(total_progress))
-                    
-                    # Update status with current file being processed
                     if current_step == "normalizing":
+                        # Normalization stage: 50-75%
+                        file_progress = (current_file / total_files) * 0.25  # 0.25 = 25% of total progress
+                        total_progress = 50 + file_progress  # Start from 50%
                         status_text = f"Normalizing video {current_file}/{total_files}..."
                     elif current_step == "concatenating":
+                        # Concatenation stage: 75-100%
+                        file_progress = (current_file / total_files) * 0.25  # 0.25 = 25% of total progress
+                        total_progress = 75 + file_progress  # Start from 75%
                         status_text = f"Concatenating videos ({current_file}/{total_files})..."
                     else:
+                        # Fallback
+                        file_progress = (current_file / total_files) * 0.5
+                        total_progress = 50 + file_progress
                         status_text = f"Processing video {current_file}/{total_files}..."
                     
+                    self.root.after(0, lambda: self.progress_var.set(total_progress))
                     self.root.after(0, lambda: self.status_var.set(status_text))
             
             # Process videos with progress callback

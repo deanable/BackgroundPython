@@ -85,8 +85,7 @@ class VideoProcessor:
                 '-c:v', 'libx264',
                 '-preset', 'medium',
                 '-crf', '23',
-                '-c:a', 'aac',
-                '-b:a', '128k',
+                '-an',  # Exclude audio tracks
                 '-y',  # Overwrite output file
                 output_path
             ]
@@ -161,6 +160,10 @@ class VideoProcessor:
             except Exception as e:
                 self.logger.exception(e, f"Normalizing video {i+1}")
         
+        # Call progress callback for normalization completion
+        if progress_callback:
+            progress_callback(len(video_paths), len(video_paths), "normalizing")
+        
         self.logger.pipeline_step("Video Normalization Complete", f"Normalized {len(normalized_paths)} videos")
         return normalized_paths
     
@@ -194,7 +197,8 @@ class VideoProcessor:
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concat_list_path,
-                '-c', 'copy',
+                '-c:v', 'copy',
+                '-an',  # Exclude audio tracks
                 '-y',  # Overwrite output file
                 output_path
             ]
@@ -241,7 +245,8 @@ class VideoProcessor:
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concat_list_path,
-                '-c', 'copy',
+                '-c:v', 'copy',
+                '-an',  # Exclude audio tracks
                 '-y',  # Overwrite output file
                 output_path
             ]
