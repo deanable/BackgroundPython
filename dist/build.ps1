@@ -89,6 +89,23 @@ try {
             Write-Host "Executable created successfully!" -ForegroundColor Green
             Write-Host "File size: $fileSize MB" -ForegroundColor Cyan
             Write-Host "Location: $(Get-Item 'dist\BackgroundPython.exe').FullName" -ForegroundColor Green
+            
+            # Clean up build artifacts
+            Write-Host ""
+            Write-Host "Cleaning up build artifacts..." -ForegroundColor Yellow
+            if (Test-Path "build") {
+                Remove-Item -Recurse -Force "build"
+                Write-Host "Removed build directory" -ForegroundColor Green
+            }
+            if (Test-Path "__pycache__") {
+                Remove-Item -Recurse -Force "__pycache__"
+                Write-Host "Removed __pycache__ directory" -ForegroundColor Green
+            }
+            if (Test-Path "*.spec") {
+                Get-ChildItem "*.spec" | Where-Object { $_.Name -ne "BackgroundPython.spec" } | Remove-Item -Force
+                Write-Host "Removed temporary spec files" -ForegroundColor Green
+            }
+            Write-Host "Cleanup completed!" -ForegroundColor Green
         } else {
             Write-Warning "Executable not found in expected location"
         }

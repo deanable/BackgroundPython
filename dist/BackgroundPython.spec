@@ -18,6 +18,10 @@ a = Analysis(
         'src.pexels_api',
         'src.video_processor',
         'src.gui',
+        'tkinter',
+        'tkinter.ttk',
+        'tkinter.messagebox',
+        'tkinter.filedialog',
         'requests',
         'cv2',
         'moviepy',
@@ -40,7 +44,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'tkinter',
         'unittest',
         'email',
         'http',

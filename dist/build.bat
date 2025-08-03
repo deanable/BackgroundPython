@@ -36,6 +36,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Clean up build artifacts
+echo Cleaning up build artifacts...
+if exist build rmdir /s /q build
+if exist __pycache__ rmdir /s /q __pycache__
+
 echo.
 echo Build completed successfully!
 echo Executable location: dist\BackgroundPython.exe
