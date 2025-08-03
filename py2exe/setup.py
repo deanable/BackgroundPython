@@ -102,7 +102,6 @@ setup(
             "excludes": excludes,
             "include_msvcr": True,  # Include Microsoft Visual C++ Runtime
             "optimize": 2,  # Optimize bytecode
-            "compressed": True,  # Compress the executable
         }
     },
     executables=executables
