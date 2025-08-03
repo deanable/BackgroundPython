@@ -1,8 +1,0 @@
-# Build dependencies for BackgroundPython executable
-cx_Freeze>=6.15.0
-setuptools>=65.0.0
-wheel>=0.38.0
-
-# Optional: Additional build tools
-# pyinstaller>=5.0.0  # Alternative to cx_Freeze
-# auto-py-to-exe>=2.20.0  # GUI tool for creating executables 

@@ -1,0 +1,7 @@
+# Build dependencies for BackgroundPython single executable
+pyinstaller>=6.0.0
+setuptools>=65.0.0
+wheel>=0.38.0
+
+# Optional: Additional build tools
+# auto-py-to-exe>=2.20.0  # GUI tool for creating executables 
