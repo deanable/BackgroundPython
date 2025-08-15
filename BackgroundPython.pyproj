@@ -15,6 +15,7 @@
     <InterpreterVersion>3.13</InterpreterVersion>
     <InterpreterArchitecture>X64</InterpreterArchitecture>
     <SuppressConfigureTestFrameworkPrompt>true</SuppressConfigureTestFrameworkPrompt>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>

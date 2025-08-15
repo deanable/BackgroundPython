@@ -67,15 +67,28 @@ class VideoProcessor:
             self.logger.exception(e, f"Getting video info for {video_path}")
             return None
     
+    def flip_resolution_for_vertical(self, target_resolution: str, aspect_ratio: str) -> str:
+        """Flip resolution dimensions for vertical aspect ratio."""
+        if aspect_ratio == "vertical":
+            width, height = map(int, target_resolution.split('x'))
+            # Flip the dimensions for vertical videos
+            flipped_resolution = f"{height}x{width}"
+            self.logger.info(f"RESOLUTION FLIP: {target_resolution} -> {flipped_resolution} for vertical aspect ratio")
+            return flipped_resolution
+        return target_resolution
+
     def normalize_video(self, input_path: str, output_path: str, target_resolution: str, 
-                       target_fps: int = 30) -> bool:
+                       target_fps: int = 30, aspect_ratio: str = "horizontal") -> bool:
         """Normalize video to target resolution and format."""
         try:
-            self.logger.video_processing("Normalization", input_path, output_path, f"Resolution: {target_resolution}")
+            # Flip resolution if vertical aspect ratio is selected
+            final_resolution = self.flip_resolution_for_vertical(target_resolution, aspect_ratio)
+            
+            self.logger.video_processing("Normalization", input_path, output_path, f"Resolution: {final_resolution}")
             start_time = time.time()
             
             # Parse target resolution
-            width, height = map(int, target_resolution.split('x'))
+            width, height = map(int, final_resolution.split('x'))
             
             # FFmpeg command for normalization
             cmd = [
@@ -108,7 +121,7 @@ class VideoProcessor:
             self.logger.exception(e, f"Normalizing video {input_path}")
             return False
     
-    def normalize_videos(self, video_paths: List[str], target_resolution: str) -> List[str]:
+    def normalize_videos(self, video_paths: List[str], target_resolution: str, aspect_ratio: str = "horizontal") -> List[str]:
         """Normalize multiple videos to the same format."""
         self.logger.pipeline_step("Video Normalization", f"Normalizing {len(video_paths)} videos to {target_resolution}")
         
@@ -121,7 +134,7 @@ class VideoProcessor:
                 base_name = os.path.splitext(os.path.basename(video_path))[0]
                 normalized_path = os.path.join(temp_dir, f"normalized_{i}_{base_name}.mp4")
                 
-                if self.normalize_video(video_path, normalized_path, target_resolution):
+                if self.normalize_video(video_path, normalized_path, target_resolution, aspect_ratio=aspect_ratio):
                     normalized_paths.append(normalized_path)
                     self.logger.info(f"VIDEO NORMALIZATION: Successfully normalized video {i+1}/{len(video_paths)}")
                 else:
@@ -134,7 +147,7 @@ class VideoProcessor:
         return normalized_paths
     
     def normalize_videos_with_progress(self, video_paths: List[str], target_resolution: str, 
-                                     progress_callback=None) -> List[str]:
+                                     progress_callback=None, aspect_ratio: str = "horizontal") -> List[str]:
         """Normalize multiple videos to the same format with progress callback."""
         self.logger.pipeline_step("Video Normalization", f"Normalizing {len(video_paths)} videos to {target_resolution}")
         
@@ -151,7 +164,7 @@ class VideoProcessor:
                 base_name = os.path.splitext(os.path.basename(video_path))[0]
                 normalized_path = os.path.join(temp_dir, f"normalized_{i}_{base_name}.mp4")
                 
-                if self.normalize_video(video_path, normalized_path, target_resolution):
+                if self.normalize_video(video_path, normalized_path, target_resolution, aspect_ratio=aspect_ratio):
                     normalized_paths.append(normalized_path)
                     self.logger.info(f"VIDEO NORMALIZATION: Successfully normalized video {i+1}/{len(video_paths)}")
                 else:
@@ -412,7 +425,7 @@ class VideoProcessor:
         return total_duration
     
     def process_videos(self, video_paths: List[str], target_duration: int, target_resolution: str, 
-                      output_path: str) -> bool:
+                      output_path: str, aspect_ratio: str = "horizontal") -> bool:
         """Main video processing pipeline."""
         try:
             self.logger.pipeline_step("Video Processing Pipeline", f"Processing {len(video_paths)} videos")
@@ -421,7 +434,7 @@ class VideoProcessor:
             initial_duration = self.calculate_total_duration(video_paths)
             
             # Normalize videos
-            normalized_paths = self.normalize_videos(video_paths, target_resolution)
+            normalized_paths = self.normalize_videos(video_paths, target_resolution, aspect_ratio)
             
             if not normalized_paths:
                 self.logger.error("No videos were successfully normalized")
@@ -455,7 +468,7 @@ class VideoProcessor:
             return False
     
     def process_videos_with_progress(self, video_paths: List[str], target_duration: int, target_resolution: str, 
-                                   output_path: str, progress_callback=None) -> bool:
+                                   output_path: str, progress_callback=None, aspect_ratio: str = "horizontal") -> bool:
         """Main video processing pipeline with progress callback."""
         try:
             self.logger.pipeline_step("Video Processing Pipeline", f"Processing {len(video_paths)} videos")
@@ -464,7 +477,7 @@ class VideoProcessor:
             initial_duration = self.calculate_total_duration(video_paths)
             
             # Normalize videos with progress
-            normalized_paths = self.normalize_videos_with_progress(video_paths, target_resolution, progress_callback)
+            normalized_paths = self.normalize_videos_with_progress(video_paths, target_resolution, progress_callback, aspect_ratio)
             
             if not normalized_paths:
                 self.logger.error("No videos were successfully normalized")

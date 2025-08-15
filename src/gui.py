@@ -94,10 +94,10 @@ class BackgroundVideoGUI:
         # Resolution
         ttk.Label(search_frame, text="Resolution:").grid(row=2, column=0, sticky=tk.W, padx=(0, 10))
         self.resolution_var = tk.StringVar()
-        resolution_combo = ttk.Combobox(search_frame, textvariable=self.resolution_var, 
+        self.resolution_combo = ttk.Combobox(search_frame, textvariable=self.resolution_var, 
                                        values=["1920x1080", "3840x2160", "1280x720"], 
                                        state="readonly", width=15)
-        resolution_combo.grid(row=2, column=1, sticky=tk.W, padx=(0, 10))
+        self.resolution_combo.grid(row=2, column=1, sticky=tk.W, padx=(0, 10))
         
         # Aspect ratio
         ttk.Label(search_frame, text="Aspect Ratio:").grid(row=3, column=0, sticky=tk.W, padx=(0, 10))
@@ -106,6 +106,30 @@ class BackgroundVideoGUI:
                                    values=["horizontal", "vertical", "square"],
                                    state="readonly", width=15)
         aspect_combo.grid(row=3, column=1, sticky=tk.W, padx=(0, 10))
+        
+        # Update resolution options when aspect ratio changes
+        def update_resolution_options(*args):
+            aspect_ratio = self.aspect_ratio_var.get()
+            if aspect_ratio == "vertical":
+                self.resolution_combo['values'] = ["1080x1920", "2160x3840", "720x1280"]
+                # Set default to first vertical option if current is horizontal
+                current = self.resolution_var.get()
+                if current in ["1920x1080", "3840x2160", "1280x720"]:
+                    self.resolution_var.set("1080x1920")
+            elif aspect_ratio == "horizontal":
+                self.resolution_combo['values'] = ["1920x1080", "3840x2160", "1280x720"]
+                # Set default to first horizontal option if current is vertical
+                current = self.resolution_var.get()
+                if current in ["1080x1920", "2160x3840", "720x1280"]:
+                    self.resolution_var.set("1920x1080")
+            elif aspect_ratio == "square":
+                self.resolution_combo['values'] = ["1080x1080", "2160x2160", "720x720"]
+                # Set default to first square option
+                current = self.resolution_var.get()
+                if current not in ["1080x1080", "2160x2160", "720x720"]:
+                    self.resolution_var.set("1080x1080")
+        
+        self.aspect_ratio_var.trace('w', update_resolution_options)
         
         # Advanced Settings Section
         advanced_frame = ttk.LabelFrame(main_frame, text="Advanced Settings", padding="10")
@@ -190,13 +214,22 @@ class BackgroundVideoGUI:
         self.search_term_var.set(self.config.get_search_term())
         # Convert target duration from seconds to minutes for UI display
         self.duration_var.set(self.config.get_duration() // 60)
-        self.resolution_var.set(self.config.get_resolution())
         self.aspect_ratio_var.set(self.config.get_aspect_ratio())
+        self.resolution_var.set(self.config.get_resolution())
         self.max_clips_var.set(self.config.get_max_clips())
         # Keep clip durations in seconds
         self.min_clip_duration_var.set(self.config.get_min_clip_duration())
         self.max_clip_duration_var.set(self.config.get_max_clip_duration())
         self.output_dir_var.set(self.config.get_output_dir())
+        
+        # Update resolution options based on loaded aspect ratio
+        aspect_ratio = self.config.get_aspect_ratio()
+        if aspect_ratio == "vertical":
+            self.resolution_combo['values'] = ["1080x1920", "2160x3840", "720x1280"]
+        elif aspect_ratio == "horizontal":
+            self.resolution_combo['values'] = ["1920x1080", "3840x2160", "1280x720"]
+        elif aspect_ratio == "square":
+            self.resolution_combo['values'] = ["1080x1080", "2160x2160", "720x720"]
         
         # Update labels to show integer values
         self.root.after(100, self.update_slider_labels)
@@ -330,7 +363,7 @@ class BackgroundVideoGUI:
             
             # Process videos with progress callback
             success = self.video_processor.process_videos_with_progress(
-                downloaded_files, target_duration, target_resolution, output_path, progress_callback
+                downloaded_files, target_duration, target_resolution, output_path, progress_callback, aspect_ratio
             )
             
             if success:
