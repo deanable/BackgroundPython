@@ -72,10 +72,38 @@ class BackgroundVideoGUI:
         search_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         search_frame.grid_columnconfigure(1, weight=1)
         
-        # Search term
+        # Search term with analysis button
         ttk.Label(search_frame, text="Search Term:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         self.search_term_var = tk.StringVar()
-        ttk.Entry(search_frame, textvariable=self.search_term_var, width=30).grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 10))
+        search_entry_frame = ttk.Frame(search_frame)
+        search_entry_frame.grid(row=0, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=(0, 10))
+        search_entry_frame.grid_columnconfigure(0, weight=1)
+        
+        ttk.Entry(search_entry_frame, textvariable=self.search_term_var, width=30).grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
+        self.analyze_button = ttk.Button(search_entry_frame, text="Analyze Content", command=self.analyze_content, width=15)
+        self.analyze_button.grid(row=0, column=1)
+        
+        # Content analysis results frame
+        self.analysis_frame = ttk.LabelFrame(search_frame, text="Content Analysis", padding=5)
+        self.analysis_frame.grid(row=0, column=3, rowspan=4, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(20, 0))
+        
+        # Analysis results
+        self.analysis_results = {}
+        self.analysis_results['clips'] = ttk.Label(self.analysis_frame, text="Clips: Not analyzed", foreground="gray", font=("Arial", 8))
+        self.analysis_results['clips'].pack(anchor="w")
+        
+        self.analysis_results['duration'] = ttk.Label(self.analysis_frame, text="Duration: Not analyzed", foreground="gray", font=("Arial", 8))
+        self.analysis_results['duration'].pack(anchor="w")
+        
+        self.analysis_results['recommended'] = ttk.Label(self.analysis_frame, text="Max: Not analyzed", foreground="gray", font=("Arial", 8))
+        self.analysis_results['recommended'].pack(anchor="w")
+        
+        self.analysis_results['warning'] = ttk.Label(self.analysis_frame, text="", foreground="red", font=("Arial", 8, "bold"))
+        self.analysis_results['warning'].pack(anchor="w")
+        
+        # Initially hide analysis frame
+        self.analysis_frame.grid_remove()
+        self.content_analysis = None
         
                 # Duration
         ttk.Label(search_frame, text="Target Duration (minutes):").grid(row=1, column=0, sticky=tk.W, padx=(0, 10))
@@ -252,6 +280,121 @@ class BackgroundVideoGUI:
         self.config.set_max_clip_duration(self.max_clip_duration_var.get())
         self.config.set_output_dir(self.output_dir_var.get())
     
+    def analyze_content(self):
+        """Analyze available content for the search query."""
+        search_term = self.search_term_var.get().strip()
+        if not search_term:
+            messagebox.showerror("Error", "Please enter a search term first")
+            return
+        
+        api_key = self.api_key_var.get().strip()
+        if not api_key:
+            messagebox.showerror("Error", "Please enter your Pexels API key first")
+            return
+        
+        # Set API key and analyze in background thread
+        self.pexels_api.set_api_key(api_key)
+        
+        # Disable analyze button and show loading
+        self.analyze_button.config(state=tk.DISABLED, text="Analyzing...")
+        
+        # Start analysis in background thread
+        thread = threading.Thread(target=self.analyze_content_thread, args=(search_term,))
+        thread.daemon = True
+        thread.start()
+    
+    def analyze_content_thread(self, search_term):
+        """Background thread for content analysis."""
+        try:
+            aspect_ratio = self.aspect_ratio_var.get() or "horizontal"
+            analysis = self.pexels_api.analyze_available_content(search_term, aspect_ratio)
+            
+            # Update UI in main thread
+            self.root.after(0, lambda: self.update_analysis_results(analysis))
+            
+        except Exception as e:
+            self.logger.exception(e, "Content analysis")
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Content analysis failed: {e}"))
+        finally:
+            # Re-enable analyze button
+            self.root.after(0, lambda: self.analyze_button.config(state=tk.NORMAL, text="Analyze Content"))
+    
+    def update_analysis_results(self, analysis):
+        """Update the analysis results in the GUI."""
+        self.content_analysis = analysis
+        
+        if analysis['filtered_clips'] == 0:
+            # No content found
+            self.analysis_results['clips'].config(text="Clips: None found", foreground="red")
+            self.analysis_results['duration'].config(text="Duration: 0 min", foreground="red")
+            self.analysis_results['recommended'].config(text="Max: N/A", foreground="red")
+            self.analysis_results['warning'].config(text="No content available!")
+        else:
+            # Content found - update display
+            clips_count = analysis['filtered_clips']
+            duration_min = analysis['filtered_duration'] / 60
+            recommended_min = analysis['recommended_max_duration'] / 60
+            
+            self.analysis_results['clips'].config(text=f"Clips: {clips_count}", foreground="green")
+            self.analysis_results['duration'].config(text=f"Duration: {duration_min:.1f} min", foreground="green")
+            self.analysis_results['recommended'].config(text=f"Max: {recommended_min:.1f} min", foreground="blue")
+            
+            # Check if current target duration will require repetition
+            current_target_min = self.duration_var.get()
+            if current_target_min > recommended_min:
+                repetition_factor = current_target_min / recommended_min
+                self.analysis_results['warning'].config(text=f"WILL REPEAT {repetition_factor:.1f}x")
+            else:
+                self.analysis_results['warning'].config(text="")
+            
+            # Smart duration binding - suggest optimal clip durations
+            self.smart_duration_binding(analysis)
+        
+        # Show analysis frame
+        self.analysis_frame.grid()
+        
+        # Bind duration slider to update warnings
+        self.duration_var.trace_add('write', self.update_duration_warning)
+    
+    def smart_duration_binding(self, analysis):
+        """Intelligently adjust clip duration ranges based on available content."""
+        if analysis['filtered_clips'] == 0:
+            return
+        
+        duration_range = analysis['duration_range']
+        
+        # Suggest optimal min/max clip durations based on available content
+        suggested_min = max(5, int(duration_range['min']))
+        suggested_max = min(60, int(duration_range['max']))
+        
+        # Only auto-adjust if current values are default or suboptimal
+        current_min = self.min_clip_duration_var.get()
+        current_max = self.max_clip_duration_var.get()
+        
+        # Auto-adjust if using defaults (20-30) or if current range doesn't match available content well
+        if (current_min == 20 and current_max == 30) or \
+           (current_max < duration_range['min']) or \
+           (current_min > duration_range['max']):
+            
+            self.min_clip_duration_var.set(suggested_min)
+            self.max_clip_duration_var.set(suggested_max)
+            
+            self.logger.info(f"SMART BINDING: Adjusted clip duration range to {suggested_min}-{suggested_max}s based on available content")
+    
+    def update_duration_warning(self, *args):
+        """Update warning when target duration changes."""
+        if self.content_analysis is None:
+            return
+        
+        current_target_min = self.duration_var.get()
+        recommended_min = self.content_analysis['recommended_max_duration'] / 60
+        
+        if current_target_min > recommended_min:
+            repetition_factor = current_target_min / recommended_min
+            self.analysis_results['warning'].config(text=f"WILL REPEAT {repetition_factor:.1f}x")
+        else:
+            self.analysis_results['warning'].config(text="")
+
     def browse_output_dir(self):
         """Browse for output directory."""
         directory = filedialog.askdirectory(initialdir=self.output_dir_var.get())
@@ -343,18 +486,26 @@ class BackgroundVideoGUI:
                 """Callback to update progress during video processing."""
                 if total_files > 0:
                     if current_step == "normalizing":
-                        # Normalization stage: 50-75%
-                        file_progress = (current_file / total_files) * 0.25  # 0.25 = 25% of total progress
+                        # Normalization stage: 50-70%
+                        file_progress = (current_file / total_files) * 0.20  # 0.20 = 20% of total progress
                         total_progress = 50 + file_progress  # Start from 50%
                         status_text = f"Normalizing video {current_file}/{total_files}..."
                     elif current_step == "concatenating":
-                        # Concatenation stage: 75-100%
-                        file_progress = (current_file / total_files) * 0.25  # 0.25 = 25% of total progress
-                        total_progress = 75 + file_progress  # Start from 75%
+                        # Concatenation stage: 70-90%
+                        file_progress = (current_file / total_files) * 0.20  # 0.20 = 20% of total progress
+                        total_progress = 70 + file_progress  # Start from 70%
                         status_text = f"Concatenating videos ({current_file}/{total_files})..."
+                    elif current_step == "trimming":
+                        # Trimming stage: 90-95%
+                        total_progress = 90
+                        status_text = "Trimming video to target duration..."
+                    elif current_step == "complete":
+                        # Final stage: 95-100%
+                        total_progress = 100
+                        status_text = "Video generation completed!"
                     else:
                         # Fallback
-                        file_progress = (current_file / total_files) * 0.5
+                        file_progress = (current_file / total_files) * 0.4
                         total_progress = 50 + file_progress
                         status_text = f"Processing video {current_file}/{total_files}..."
                     

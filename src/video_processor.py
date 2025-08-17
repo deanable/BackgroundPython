@@ -130,9 +130,9 @@ class VideoProcessor:
         
         for i, video_path in enumerate(video_paths):
             try:
-                # Create normalized filename
+                # Create normalized filename with temp prefix
                 base_name = os.path.splitext(os.path.basename(video_path))[0]
-                normalized_path = os.path.join(temp_dir, f"normalized_{i}_{base_name}.mp4")
+                normalized_path = os.path.join(temp_dir, f"temp_background_video_normalized_{i}_{base_name}.mp4")
                 
                 if self.normalize_video(video_path, normalized_path, target_resolution, aspect_ratio=aspect_ratio):
                     normalized_paths.append(normalized_path)
@@ -160,9 +160,9 @@ class VideoProcessor:
                 if progress_callback:
                     progress_callback(i + 1, len(video_paths), "normalizing")
                 
-                # Create normalized filename
+                # Create normalized filename with temp prefix
                 base_name = os.path.splitext(os.path.basename(video_path))[0]
-                normalized_path = os.path.join(temp_dir, f"normalized_{i}_{base_name}.mp4")
+                normalized_path = os.path.join(temp_dir, f"temp_background_video_normalized_{i}_{base_name}.mp4")
                 
                 if self.normalize_video(video_path, normalized_path, target_resolution, aspect_ratio=aspect_ratio):
                     normalized_paths.append(normalized_path)
@@ -424,17 +424,99 @@ class VideoProcessor:
         self.logger.info(f"TOTAL DURATION: {total_duration:.1f} seconds")
         return total_duration
     
+    def extend_clips_to_duration(self, video_paths: List[str], target_duration: int) -> List[str]:
+        """Extend clips by repeating them to reach target duration."""
+        try:
+            if not video_paths:
+                return []
+            
+            # Calculate total duration of available clips
+            total_available_duration = self.calculate_total_duration(video_paths)
+            
+            if total_available_duration == 0:
+                self.logger.error("No valid video durations found")
+                return video_paths
+            
+            self.logger.info(f"DURATION EXTENSION: Target: {target_duration}s, Available: {total_available_duration:.1f}s")
+            
+            # If we have at least 80% of target duration, don't repeat - just trim later
+            min_acceptable_duration = target_duration * 0.8
+            if total_available_duration >= min_acceptable_duration:
+                self.logger.info(f"DURATION CHECK: Available clips ({total_available_duration:.1f}s) are sufficient for target ({target_duration}s) - no repetition needed")
+                return video_paths
+            
+            # Only repeat if we have significantly less content than needed
+            self.logger.warning(f"INSUFFICIENT CONTENT: Only {total_available_duration:.1f}s available for {target_duration}s target")
+            
+            # Calculate minimal repetitions needed
+            repetitions_needed = int(target_duration / total_available_duration) + 1
+            self.logger.info(f"DURATION EXTENSION: Repeating clips {repetitions_needed} times to reach minimum duration")
+            
+            # Create extended list by repeating clips
+            extended_paths = []
+            for _ in range(repetitions_needed):
+                extended_paths.extend(video_paths)
+            
+            # Calculate new total duration
+            extended_duration = self.calculate_total_duration(extended_paths)
+            self.logger.info(f"DURATION EXTENSION: Extended duration: {extended_duration:.1f}s")
+            
+            return extended_paths
+            
+        except Exception as e:
+            self.logger.exception(e, "Extending clips to duration")
+            return video_paths
+    
+    def trim_video_to_duration(self, input_path: str, output_path: str, target_duration: int) -> bool:
+        """Trim video to exact target duration using FFmpeg."""
+        try:
+            self.logger.video_processing("Duration Trimming", input_path, output_path, f"Target: {target_duration}s")
+            start_time = time.time()
+            
+            # FFmpeg command to trim video to exact duration
+            cmd = [
+                'ffmpeg', '-i', input_path,
+                '-t', str(target_duration),  # Trim to target duration
+                '-c:v', 'copy',  # Copy video codec (no re-encoding)
+                '-an',  # Exclude audio tracks
+                '-y',  # Overwrite output file
+                output_path
+            ]
+            
+            self.logger.debug(f"FFMPEG TRIM: {' '.join(cmd)}")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                elapsed = time.time() - start_time
+                final_duration = self.get_video_duration(output_path)
+                file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+                
+                self.logger.performance(f"Video trimming completed in {elapsed:.1f}s - Final duration: {final_duration:.1f}s, {file_size_mb:.1f}MB")
+                self.logger.video_processing("Trimming complete", input_path, output_path, f"Final: {final_duration:.1f}s")
+                return True
+            else:
+                self.logger.error(f"Video trimming failed: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            self.logger.exception(e, f"Trimming video {input_path}")
+            return False
+
     def process_videos(self, video_paths: List[str], target_duration: int, target_resolution: str, 
                       output_path: str, aspect_ratio: str = "horizontal") -> bool:
-        """Main video processing pipeline."""
+        """Main video processing pipeline with duration control."""
         try:
-            self.logger.pipeline_step("Video Processing Pipeline", f"Processing {len(video_paths)} videos")
+            self.logger.pipeline_step("Video Processing Pipeline", f"Processing {len(video_paths)} videos for {target_duration}s target")
             
             # Calculate initial total duration
             initial_duration = self.calculate_total_duration(video_paths)
             
+            # Extend clips if needed to reach target duration
+            extended_paths = self.extend_clips_to_duration(video_paths, target_duration)
+            
             # Normalize videos
-            normalized_paths = self.normalize_videos(video_paths, target_resolution, aspect_ratio)
+            normalized_paths = self.normalize_videos(extended_paths, target_resolution, aspect_ratio)
             
             if not normalized_paths:
                 self.logger.error("No videos were successfully normalized")
@@ -443,19 +525,39 @@ class VideoProcessor:
             # Calculate normalized total duration
             normalized_duration = self.calculate_total_duration(normalized_paths)
             
+            # Create temporary output path for concatenation
+            temp_dir = self.create_temp_directory()
+            temp_concat_path = os.path.join(temp_dir, "temp_concatenated.mp4")
+            
             # Try FFmpeg concatenation first, fallback to MoviePy
-            success = self.concatenate_videos_ffmpeg(normalized_paths, output_path)
+            success = self.concatenate_videos_ffmpeg(normalized_paths, temp_concat_path)
             
             if not success:
                 self.logger.warning("FFmpeg concatenation failed, trying MoviePy")
-                success = self.concatenate_videos_moviepy(normalized_paths, output_path)
+                success = self.concatenate_videos_moviepy(normalized_paths, temp_concat_path)
+            
+            if not success:
+                self.logger.error("Video concatenation failed")
+                return False
+            
+            # Check if we need to trim to exact duration
+            concat_duration = self.get_video_duration(temp_concat_path)
+            
+            if concat_duration > target_duration:
+                self.logger.info(f"DURATION CONTROL: Trimming video from {concat_duration:.1f}s to {target_duration}s")
+                success = self.trim_video_to_duration(temp_concat_path, output_path, target_duration)
+            else:
+                # Duration is already correct or shorter, just copy the file
+                import shutil
+                shutil.copy2(temp_concat_path, output_path)
+                success = True
             
             if success:
                 final_duration = self.get_video_duration(output_path)
                 file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
                 
                 self.logger.pipeline_step("Video Processing Complete", 
-                                        f"Final video: {final_duration:.1f}s, {file_size_mb:.1f}MB")
+                                        f"Final video: {final_duration:.1f}s (target: {target_duration}s), {file_size_mb:.1f}MB")
                 self.logger.file_operation("Created", os.path.basename(output_path), f"{file_size_mb:.1f}MB")
                 
                 return True
@@ -469,15 +571,18 @@ class VideoProcessor:
     
     def process_videos_with_progress(self, video_paths: List[str], target_duration: int, target_resolution: str, 
                                    output_path: str, progress_callback=None, aspect_ratio: str = "horizontal") -> bool:
-        """Main video processing pipeline with progress callback."""
+        """Main video processing pipeline with progress callback and duration control."""
         try:
-            self.logger.pipeline_step("Video Processing Pipeline", f"Processing {len(video_paths)} videos")
+            self.logger.pipeline_step("Video Processing Pipeline", f"Processing {len(video_paths)} videos for {target_duration}s target")
             
             # Calculate initial total duration
             initial_duration = self.calculate_total_duration(video_paths)
             
+            # Extend clips if needed to reach target duration
+            extended_paths = self.extend_clips_to_duration(video_paths, target_duration)
+            
             # Normalize videos with progress
-            normalized_paths = self.normalize_videos_with_progress(video_paths, target_resolution, progress_callback, aspect_ratio)
+            normalized_paths = self.normalize_videos_with_progress(extended_paths, target_resolution, progress_callback, aspect_ratio)
             
             if not normalized_paths:
                 self.logger.error("No videos were successfully normalized")
@@ -486,20 +591,48 @@ class VideoProcessor:
             # Calculate normalized total duration
             normalized_duration = self.calculate_total_duration(normalized_paths)
             
+            # Create temporary output path for concatenation
+            temp_dir = self.create_temp_directory()
+            temp_concat_path = os.path.join(temp_dir, "temp_concatenated.mp4")
+            
             # Try FFmpeg concatenation first, fallback to MoviePy
-            success = self.concatenate_videos_ffmpeg_with_progress(normalized_paths, output_path, progress_callback)
+            success = self.concatenate_videos_ffmpeg_with_progress(normalized_paths, temp_concat_path, progress_callback)
             
             if not success:
                 self.logger.warning("FFmpeg concatenation failed, trying MoviePy")
-                success = self.concatenate_videos_moviepy_with_progress(normalized_paths, output_path, progress_callback)
+                success = self.concatenate_videos_moviepy_with_progress(normalized_paths, temp_concat_path, progress_callback)
+            
+            if not success:
+                self.logger.error("Video concatenation failed")
+                return False
+            
+            # Update progress for trimming phase
+            if progress_callback:
+                progress_callback(1, 1, "trimming")
+            
+            # Check if we need to trim to exact duration
+            concat_duration = self.get_video_duration(temp_concat_path)
+            
+            if concat_duration > target_duration:
+                self.logger.info(f"DURATION CONTROL: Trimming video from {concat_duration:.1f}s to {target_duration}s")
+                success = self.trim_video_to_duration(temp_concat_path, output_path, target_duration)
+            else:
+                # Duration is already correct or shorter, just copy the file
+                import shutil
+                shutil.copy2(temp_concat_path, output_path)
+                success = True
             
             if success:
                 final_duration = self.get_video_duration(output_path)
                 file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
                 
                 self.logger.pipeline_step("Video Processing Complete", 
-                                        f"Final video: {final_duration:.1f}s, {file_size_mb:.1f}MB")
+                                        f"Final video: {final_duration:.1f}s (target: {target_duration}s), {file_size_mb:.1f}MB")
                 self.logger.file_operation("Created", os.path.basename(output_path), f"{file_size_mb:.1f}MB")
+                
+                # Final progress update
+                if progress_callback:
+                    progress_callback(1, 1, "complete")
                 
                 return True
             else:
