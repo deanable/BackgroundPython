@@ -11,8 +11,17 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-import cv2
+try:
+    from moviepy.video.compositing.concatenate import concatenate_videoclips
+except ImportError:
+    try:
+        from moviepy.editor import concatenate_videoclips
+    except ImportError:
+        try:
+            from moviepy import concatenate_videoclips
+        except ImportError:
+            concatenate_videoclips = None
+
 
 class VideoProcessor:
     """Video processing class for handling video operations."""
@@ -297,6 +306,10 @@ class VideoProcessor:
                 self.logger.error("No videos to concatenate")
                 return False
             
+            if concatenate_videoclips is None:
+                self.logger.error("MoviePy concatenation not available")
+                return False
+            
             # Load video clips
             clips = []
             for video_path in video_paths:
@@ -311,19 +324,17 @@ class VideoProcessor:
                 self.logger.error("No valid clips to concatenate")
                 return False
             
-            # For now, use only the first clip as concatenation is complex in this MoviePy version
-            # In a production environment, you might want to implement proper concatenation
+            # Concatenate clips
             if len(clips) > 1:
-                self.logger.warning(f"MoviePy concatenation limited - using first clip only. Total clips: {len(clips)}")
-            
-            final_clip = clips[0]
+                self.logger.info(f"MoviePy: Concatenating {len(clips)} clips")
+                final_clip = concatenate_videoclips(clips, method="compose")
+            else:
+                final_clip = clips[0]
             
             # Write final video
             final_clip.write_videofile(
                 output_path,
                 codec='libx264',
-                audio_codec='aac',
-                temp_audiofile='temp-audio.m4a',
                 remove_temp=True
             )
             
@@ -353,6 +364,10 @@ class VideoProcessor:
                 self.logger.error("No videos to concatenate")
                 return False
             
+            if concatenate_videoclips is None:
+                self.logger.error("MoviePy concatenation not available")
+                return False
+            
             # Load video clips with progress
             clips = []
             for i, video_path in enumerate(video_paths):
@@ -371,19 +386,17 @@ class VideoProcessor:
                 self.logger.error("No valid clips to concatenate")
                 return False
             
-            # For now, use only the first clip as concatenation is complex in this MoviePy version
-            # In a production environment, you might want to implement proper concatenation
+            # Concatenate clips
             if len(clips) > 1:
-                self.logger.warning(f"MoviePy concatenation limited - using first clip only. Total clips: {len(clips)}")
-            
-            final_clip = clips[0]
+                self.logger.info(f"MoviePy: Concatenating {len(clips)} clips")
+                final_clip = concatenate_videoclips(clips, method="compose")
+            else:
+                final_clip = clips[0]
             
             # Write final video
             final_clip.write_videofile(
                 output_path,
                 codec='libx264',
-                audio_codec='aac',
-                temp_audiofile='temp-audio.m4a',
                 remove_temp=True
             )
             
@@ -439,17 +452,17 @@ class VideoProcessor:
             
             self.logger.info(f"DURATION EXTENSION: Target: {target_duration}s, Available: {total_available_duration:.1f}s")
             
-            # If we have at least 80% of target duration, don't repeat - just trim later
-            min_acceptable_duration = target_duration * 0.8
-            if total_available_duration >= min_acceptable_duration:
+            # If we already have enough duration, don't repeat
+            if total_available_duration >= target_duration:
                 self.logger.info(f"DURATION CHECK: Available clips ({total_available_duration:.1f}s) are sufficient for target ({target_duration}s) - no repetition needed")
                 return video_paths
             
-            # Only repeat if we have significantly less content than needed
-            self.logger.warning(f"INSUFFICIENT CONTENT: Only {total_available_duration:.1f}s available for {target_duration}s target")
+            # Only repeat if we have less content than the target duration
+            self.logger.warning(f"INSUFFICIENT CONTENT: Only {total_available_duration:.1f}s available for {target_duration}s target - repeating clips")
             
             # Calculate minimal repetitions needed
-            repetitions_needed = int(target_duration / total_available_duration) + 1
+            import math
+            repetitions_needed = math.ceil(target_duration / total_available_duration)
             self.logger.info(f"DURATION EXTENSION: Repeating clips {repetitions_needed} times to reach minimum duration")
             
             # Create extended list by repeating clips
