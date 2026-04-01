@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import threading
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,8 @@ class BackgroundVideoGUI:
         self.logger = logger
         
         self.processing = False
+        self.cancel_event = threading.Event()
+        self.active_download_dir: Optional[str] = None
         self.progress_var = tk.DoubleVar()
         
         self.setup_window()
@@ -427,6 +430,8 @@ class BackgroundVideoGUI:
             return
         
         self.save_config()
+        self.cancel_event = threading.Event()
+        self.active_download_dir = None
         
         # Set up API
         self.pexels_api.set_api_key(self.api_key_var.get())
@@ -462,6 +467,9 @@ class BackgroundVideoGUI:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_filename = f"background_video_{search_term.replace(' ', '_')}_{timestamp}.mp4"
             output_path = os.path.join(output_dir, output_filename)
+            download_dir = os.path.join(output_dir, f".bg_video_downloads_{timestamp}")
+            self.active_download_dir = download_dir
+            os.makedirs(download_dir, exist_ok=True)
             
             # Update status for downloading phase (0-50%)
             self.root.after(0, lambda: self.status_var.set("Searching and downloading videos..."))
@@ -470,8 +478,14 @@ class BackgroundVideoGUI:
             # Search and download videos
             downloaded_files = self.pexels_api.search_and_download_videos(
                 search_term, target_duration, target_resolution, aspect_ratio,
-                max_clips, min_clip_duration, max_clip_duration, output_dir
+                max_clips, min_clip_duration, max_clip_duration, output_dir,
+                temp_dir=download_dir,
+                cancel_event=self.cancel_event,
             )
+            
+            if self.cancel_event.is_set():
+                self.root.after(0, lambda: self.status_var.set("Generation cancelled"))
+                return
             
             if not downloaded_files:
                 self.root.after(0, lambda: messagebox.showerror("Error", "No videos were downloaded"))
@@ -514,21 +528,18 @@ class BackgroundVideoGUI:
             
             # Process videos with progress callback
             success = self.video_processor.process_videos_with_progress(
-                downloaded_files, target_duration, target_resolution, output_path, progress_callback, aspect_ratio
+                downloaded_files, target_duration, target_resolution, output_path, progress_callback, aspect_ratio,
+                self.cancel_event,
             )
+            
+            if self.cancel_event.is_set():
+                self.root.after(0, lambda: self.status_var.set("Generation cancelled"))
+                return
             
             if success:
                 self.root.after(0, lambda: self.status_var.set("Video generation completed!"))
                 self.root.after(0, lambda: self.progress_var.set(100))
                 self.root.after(0, lambda: messagebox.showinfo("Success", f"Video generated successfully!\nOutput: {output_path}"))
-                
-                # Clean up downloaded files
-                for file_path in downloaded_files:
-                    try:
-                        os.remove(file_path)
-                        self.logger.file_operation("Cleaned up", os.path.basename(file_path))
-                    except Exception as e:
-                        self.logger.warning(f"Failed to clean up {file_path}: {e}")
             else:
                 self.root.after(0, lambda: messagebox.showerror("Error", "Video processing failed. Check logs for details."))
             
@@ -536,21 +547,38 @@ class BackgroundVideoGUI:
             self.logger.exception(e, "Video generation thread")
             self.root.after(0, lambda: messagebox.showerror("Error", f"Video generation failed: {e}"))
         finally:
+            self.cleanup_download_dir()
             # Reset UI state
             self.root.after(0, self.reset_ui_state)
     
     def stop_generation(self):
         """Stop the video generation process."""
         self.processing = False
+        self.cancel_event.set()
         self.status_var.set("Stopping...")
         self.logger.info("USER: Video generation stopped by user")
+    
+    def cleanup_download_dir(self):
+        """Remove temporary downloads for the active generation run."""
+        if not self.active_download_dir:
+            return
+        
+        try:
+            if os.path.exists(self.active_download_dir):
+                shutil.rmtree(self.active_download_dir)
+                self.logger.info(f"TEMP: Cleaned up download directory: {self.active_download_dir}")
+        except Exception as e:
+            self.logger.warning(f"Failed to clean up download directory {self.active_download_dir}: {e}")
+        finally:
+            self.active_download_dir = None
     
     def reset_ui_state(self):
         """Reset UI to initial state."""
         self.processing = False
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
-        self.status_var.set("Ready")
+        if not self.status_var.get().endswith("cancelled"):
+            self.status_var.set("Ready")
     
     def open_logs(self):
         """Open the logs directory."""
@@ -568,6 +596,7 @@ class BackgroundVideoGUI:
         if self.processing:
             if messagebox.askokcancel("Quit", "Video generation is in progress. Do you want to quit?"):
                 self.processing = False
+                self.cancel_event.set()
                 self.save_window_geometry()
                 self.root.destroy()
         else:

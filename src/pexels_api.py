@@ -3,13 +3,15 @@ Pexels API client for Background Video Generator.
 Handles searching and downloading video clips from Pexels.
 """
 
-import requests
-import time
 import os
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from urllib.parse import urlparse
-import hashlib
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 class PexelsAPI:
     """Pexels API client for video operations."""
@@ -18,10 +20,32 @@ class PexelsAPI:
         """Initialize Pexels API client."""
         self.logger = logger
         self.base_url = "https://api.pexels.com/videos"
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.request_timeout = (10, 60)
+        self.download_workers = 4
+        self.session = self._create_session()
+    
+    def _create_session(self) -> requests.Session:
+        """Create a configured requests session with retries."""
+        session = requests.Session()
+        session.headers.update({
             'User-Agent': 'BackgroundVideoGenerator/1.0'
         })
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        return session
+    
+    @staticmethod
+    def _is_cancelled(cancel_event: Optional[threading.Event]) -> bool:
+        """Check whether the current operation has been cancelled."""
+        return cancel_event is not None and cancel_event.is_set()
     
     def set_api_key(self, api_key: str) -> None:
         """Set the API key for authentication."""
@@ -42,7 +66,11 @@ class PexelsAPI:
                 'page': page
             }
             
-            response = self.session.get(f"{self.base_url}/search", params=params)
+            response = self.session.get(
+                f"{self.base_url}/search",
+                params=params,
+                timeout=self.request_timeout,
+            )
             
             if response.status_code == 200:
                 data = response.json()
@@ -97,24 +125,36 @@ class PexelsAPI:
         self.logger.info(f"VIDEO FILTERING: Filtered to {len(filtered)} videos with {aspect_ratio} aspect ratio")
         return filtered
     
-    def download_video(self, video_url: str, output_path: str) -> bool:
+    def download_video(self, video_url: str, output_path: str, cancel_event: Optional[threading.Event] = None) -> bool:
         """Download a video file."""
+        if self._is_cancelled(cancel_event):
+            self.logger.info(f"VIDEO DOWNLOAD: Skipping cancelled download for {os.path.basename(output_path)}")
+            return False
+        
+        temp_output_path = f"{output_path}.part"
         try:
             self.logger.file_operation("Downloading", os.path.basename(output_path))
             start_time = time.time()
             
-            response = self.session.get(video_url, stream=True)
-            response.raise_for_status()
+            session = self._create_session()
+            session.headers.update(self.session.headers)
             
-            # Get file size
-            total_size = int(response.headers.get('content-length', 0))
+            with session.get(video_url, stream=True, timeout=self.request_timeout) as response:
+                response.raise_for_status()
+                
+                total_size = int(response.headers.get('content-length', 0))
+                
+                with open(temp_output_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if self._is_cancelled(cancel_event):
+                            self.logger.warning(f"VIDEO DOWNLOAD: Cancelled while downloading {os.path.basename(output_path)}")
+                            if os.path.exists(temp_output_path):
+                                os.remove(temp_output_path)
+                            return False
+                        if chunk:
+                            f.write(chunk)
             
-            with open(output_path, 'wb') as f:
-                downloaded = 0
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
+            os.replace(temp_output_path, output_path)
             
             elapsed = time.time() - start_time
             file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
@@ -129,6 +169,8 @@ class PexelsAPI:
             return True
             
         except Exception as e:
+            if os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
             self.logger.exception(e, f"Downloading {video_url}")
             return False
     
@@ -275,13 +317,16 @@ class PexelsAPI:
                 'clips_by_duration': {}
             }
 
-    def search_multiple_pages(self, query: str, target_clips_needed: int) -> List[Dict[str, Any]]:
+    def search_multiple_pages(self, query: str, target_clips_needed: int, cancel_event: Optional[threading.Event] = None) -> List[Dict[str, Any]]:
         """Search multiple pages to get enough clips without repetition."""
         all_videos = []
         page = 1
         max_pages = 5  # Limit to prevent infinite loops
         
         while len(all_videos) < target_clips_needed and page <= max_pages:
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("MULTI-PAGE SEARCH: Cancelled before completing search")
+                break
             self.logger.info(f"MULTI-PAGE SEARCH: Fetching page {page} for more clips")
             search_result = self.search_videos(query, per_page=80, page=page)
             
@@ -304,16 +349,20 @@ class PexelsAPI:
 
     def search_and_download_videos(self, query: str, target_duration: int, target_resolution: str, 
                                  aspect_ratio: str, max_clips: int, min_clip_duration: int, 
-                                 max_clip_duration: int, output_dir: str) -> List[str]:
+                                 max_clip_duration: int, output_dir: str, temp_dir: Optional[str] = None,
+                                 cancel_event: Optional[threading.Event] = None) -> List[str]:
         """Search for videos and download them with intelligent clip selection to avoid repetition."""
         try:
             self.logger.pipeline_step("Video Search and Download", f"Query: {query}, Target: {target_duration}s")
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO SEARCH: Cancelled before search started")
+                return []
             
             # Calculate optimal number of clips to download
             optimal_clip_count = self.calculate_optimal_clip_count(target_duration, min_clip_duration, max_clip_duration, max_clips)
             
             # Search multiple pages if needed to get enough unique clips
-            all_videos = self.search_multiple_pages(query, optimal_clip_count)
+            all_videos = self.search_multiple_pages(query, optimal_clip_count, cancel_event)
             
             if not all_videos:
                 self.logger.error("No search results returned")
@@ -362,25 +411,53 @@ class PexelsAPI:
             if estimated_total_duration < target_duration * 0.8:  # Less than 80% of target
                 self.logger.warning(f"INSUFFICIENT CLIPS: Only {estimated_total_duration:.1f}s available for {target_duration}s target. Video may be shorter than requested or require minimal repetition.")
             
-            # Download videos
-            downloaded_files = []
+            download_dir = temp_dir or output_dir
+            os.makedirs(download_dir, exist_ok=True)
+            
+            download_jobs = []
             for i, video in enumerate(selected_videos):
+                if self._is_cancelled(cancel_event):
+                    self.logger.warning("VIDEO DOWNLOAD: Cancelled before downloads started")
+                    break
                 video_files = self.get_video_files(video)
                 video_url = self.get_best_video_url(video_files, target_resolution)
                 
                 if video_url:
-                    # Create filename with temp prefix for better cleanup
                     video_id = video.get('id', i)
                     filename = f"temp_background_video_clip_{i}_{video_id}_{query.replace(' ', '_')}.mp4"
-                    output_path = os.path.join(output_dir, filename)
-                    
-                    if self.download_video(video_url, output_path):
-                        downloaded_files.append(output_path)
-                        self.logger.info(f"VIDEO DOWNLOAD: Successfully downloaded clip {i+1}/{len(selected_videos)}")
-                    else:
-                        self.logger.error(f"VIDEO DOWNLOAD: Failed to download clip {i+1}")
+                    output_path = os.path.join(download_dir, filename)
+                    download_jobs.append((i, video_url, output_path))
                 else:
                     self.logger.warning(f"VIDEO DOWNLOAD: No suitable video URL found for clip {i+1}")
+            
+            downloaded_files: List[str] = []
+            if download_jobs:
+                worker_count = min(self.download_workers, len(download_jobs))
+                self.logger.info(f"VIDEO DOWNLOAD: Starting {len(download_jobs)} downloads with {worker_count} workers")
+                download_results: Dict[int, str] = {}
+                
+                with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                    future_map = {
+                        executor.submit(self.download_video, video_url, output_path, cancel_event): (index, output_path)
+                        for index, video_url, output_path in download_jobs
+                    }
+                    
+                    for future in as_completed(future_map):
+                        index, output_path = future_map[future]
+                        if self._is_cancelled(cancel_event):
+                            self.logger.warning("VIDEO DOWNLOAD: Cancellation requested, waiting for active downloads to finish")
+                        
+                        success = future.result()
+                        if success:
+                            download_results[index] = output_path
+                            self.logger.info(f"VIDEO DOWNLOAD: Successfully downloaded clip {index + 1}/{len(selected_videos)}")
+                        else:
+                            self.logger.error(f"VIDEO DOWNLOAD: Failed to download clip {index + 1}")
+                
+                downloaded_files = [download_results[index] for index in sorted(download_results)]
+            
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO DOWNLOAD: Returning partial or empty results due to cancellation")
             
             self.logger.pipeline_step("Video Download Complete", f"Downloaded {len(downloaded_files)} unique clips")
             return downloaded_files

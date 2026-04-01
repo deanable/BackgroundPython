@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import json
 import time
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from moviepy.video.io.VideoFileClip import VideoFileClip
@@ -31,6 +32,11 @@ class VideoProcessor:
         self.logger = logger
         self.temp_dir = None
         self.check_ffmpeg()
+    
+    @staticmethod
+    def _is_cancelled(cancel_event: Optional[threading.Event]) -> bool:
+        """Check whether the current operation has been cancelled."""
+        return cancel_event is not None and cancel_event.is_set()
     
     def check_ffmpeg(self) -> bool:
         """Check if FFmpeg is available in the system."""
@@ -156,7 +162,8 @@ class VideoProcessor:
         return normalized_paths
     
     def normalize_videos_with_progress(self, video_paths: List[str], target_resolution: str, 
-                                     progress_callback=None, aspect_ratio: str = "horizontal") -> List[str]:
+                                     progress_callback=None, aspect_ratio: str = "horizontal",
+                                     cancel_event: Optional[threading.Event] = None) -> List[str]:
         """Normalize multiple videos to the same format with progress callback."""
         self.logger.pipeline_step("Video Normalization", f"Normalizing {len(video_paths)} videos to {target_resolution}")
         
@@ -164,6 +171,9 @@ class VideoProcessor:
         normalized_paths = []
         
         for i, video_path in enumerate(video_paths):
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO NORMALIZATION: Cancelled before completing normalization")
+                break
             try:
                 # Call progress callback for normalization step
                 if progress_callback:
@@ -244,7 +254,7 @@ class VideoProcessor:
             return False
     
     def concatenate_videos_ffmpeg_with_progress(self, video_paths: List[str], output_path: str, 
-                                              progress_callback=None) -> bool:
+                                              progress_callback=None, cancel_event: Optional[threading.Event] = None) -> bool:
         """Concatenate videos using FFmpeg with progress callback."""
         try:
             self.logger.video_processing("Concatenation", f"{len(video_paths)} videos", output_path)
@@ -252,6 +262,10 @@ class VideoProcessor:
             
             if not video_paths:
                 self.logger.error("No videos to concatenate")
+                return False
+            
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO CONCATENATION: Cancelled before FFmpeg concatenation started")
                 return False
             
             # Call progress callback for concatenation start
@@ -354,7 +368,7 @@ class VideoProcessor:
             return False
     
     def concatenate_videos_moviepy_with_progress(self, video_paths: List[str], output_path: str, 
-                                               progress_callback=None) -> bool:
+                                               progress_callback=None, cancel_event: Optional[threading.Event] = None) -> bool:
         """Concatenate videos using MoviePy (fallback method) with progress callback."""
         try:
             self.logger.video_processing("Concatenation (MoviePy)", f"{len(video_paths)} videos", output_path)
@@ -371,6 +385,9 @@ class VideoProcessor:
             # Load video clips with progress
             clips = []
             for i, video_path in enumerate(video_paths):
+                if self._is_cancelled(cancel_event):
+                    self.logger.warning("VIDEO CONCATENATION: Cancelled before MoviePy concatenation completed")
+                    break
                 try:
                     # Call progress callback for loading clips
                     if progress_callback:
@@ -583,22 +600,39 @@ class VideoProcessor:
             return False
     
     def process_videos_with_progress(self, video_paths: List[str], target_duration: int, target_resolution: str, 
-                                   output_path: str, progress_callback=None, aspect_ratio: str = "horizontal") -> bool:
+                                   output_path: str, progress_callback=None, aspect_ratio: str = "horizontal",
+                                   cancel_event: Optional[threading.Event] = None) -> bool:
         """Main video processing pipeline with progress callback and duration control."""
         try:
             self.logger.pipeline_step("Video Processing Pipeline", f"Processing {len(video_paths)} videos for {target_duration}s target")
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO PROCESSING: Cancelled before processing started")
+                return False
             
             # Calculate initial total duration
             initial_duration = self.calculate_total_duration(video_paths)
             
             # Extend clips if needed to reach target duration
             extended_paths = self.extend_clips_to_duration(video_paths, target_duration)
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO PROCESSING: Cancelled before normalization")
+                return False
             
             # Normalize videos with progress
-            normalized_paths = self.normalize_videos_with_progress(extended_paths, target_resolution, progress_callback, aspect_ratio)
+            normalized_paths = self.normalize_videos_with_progress(
+                extended_paths,
+                target_resolution,
+                progress_callback,
+                aspect_ratio,
+                cancel_event,
+            )
             
             if not normalized_paths:
                 self.logger.error("No videos were successfully normalized")
+                return False
+            
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO PROCESSING: Cancelled after normalization")
                 return False
             
             # Calculate normalized total duration
@@ -609,14 +643,31 @@ class VideoProcessor:
             temp_concat_path = os.path.join(temp_dir, "temp_concatenated.mp4")
             
             # Try FFmpeg concatenation first, fallback to MoviePy
-            success = self.concatenate_videos_ffmpeg_with_progress(normalized_paths, temp_concat_path, progress_callback)
+            success = self.concatenate_videos_ffmpeg_with_progress(
+                normalized_paths,
+                temp_concat_path,
+                progress_callback,
+                cancel_event,
+            )
             
             if not success:
                 self.logger.warning("FFmpeg concatenation failed, trying MoviePy")
-                success = self.concatenate_videos_moviepy_with_progress(normalized_paths, temp_concat_path, progress_callback)
+                if self._is_cancelled(cancel_event):
+                    self.logger.warning("VIDEO PROCESSING: Cancelled before fallback concatenation")
+                    return False
+                success = self.concatenate_videos_moviepy_with_progress(
+                    normalized_paths,
+                    temp_concat_path,
+                    progress_callback,
+                    cancel_event,
+                )
             
             if not success:
                 self.logger.error("Video concatenation failed")
+                return False
+            
+            if self._is_cancelled(cancel_event):
+                self.logger.warning("VIDEO PROCESSING: Cancelled before trimming")
                 return False
             
             # Update progress for trimming phase
